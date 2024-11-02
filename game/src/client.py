@@ -10,7 +10,7 @@ from sys import stdin
 
 def operator(op, user_id, username, score):
     # Make socket
-    transport = TSocket.TSocket('localhost', 9090)
+    transport = TSocket.TSocket('127.0.0.1', 9090)
 
     # Buffering is critical. Raw so:ckets are very slow
     transport = TTransport.TBufferedTransport(transport)

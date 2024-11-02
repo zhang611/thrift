@@ -2,10 +2,16 @@
 // You should copy it to another filename to avoid overwriting it.
 
 #include "match_server/Match.h"
+#include "save_client/Save.h"
+
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TTransportUtils.h>
+#include <thrift/transport/TSocket.h>
+
+
 #include <iostream>
 #include <thread>
 #include <mutex>
@@ -18,8 +24,13 @@ using namespace ::apache::thrift::protocol;
 using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
 
-using namespace  ::match_service;
+using namespace ::match_service;
+using namespace ::save_service;
 using namespace std;
+
+
+
+
 
 struct Task {
     User user;
@@ -51,6 +62,21 @@ class Pool{
         void save_result(int a, int b) {
             printf("Match Result: %d %d\n", a, b);
 
+            std::shared_ptr<TTransport> socket(new TSocket("123.57.47.211", 9090));
+            std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+            std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+            SaveClient client(protocol);
+
+            try {
+                transport->open();
+                int res = client.save_data("acs_7192", "536ed098", a, b);
+                if(!res) cout << "success" << endl;
+                else cout << "failed" << endl;
+
+                transport->close();
+            } catch (TException& tx) {
+                cout << "ERROR: " << tx.what() << '\n';
+            }
 
         }
 
@@ -63,8 +89,8 @@ class Pool{
             }
         }
 
-private:
-    vector<User> users;
+    private:
+        vector<User> users;
 
 }pool;
 
@@ -124,10 +150,10 @@ void consume_task() {
             auto task = message_queue.q.front();
             message_queue.q.pop();
             lck.unlock();  // 做具体任务之前就解锁，别浪费资源
-            
+
             if (task.type == "add") pool.add(task.user);
             else if(task.type == "remove") pool.remove(task.user);
-            
+
             pool.match();
         }
     }
@@ -147,9 +173,9 @@ int main(int argc, char **argv) {
     ::std::shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
 
     TSimpleServer server(processor, serverTransport, transportFactory, protocolFactory);
-    
+
     std::cout << "Start Match Server" << std::endl;
-    
+
     // 使用多线程
     thread matching_thread(consume_task);
 
