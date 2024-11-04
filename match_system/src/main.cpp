@@ -52,12 +52,14 @@ class Pool{
     public:
         void add(User user) {
             users.push_back(user);
+            wt.push_back(0);
         }
 
         void remove(User user) {
             for (uint32_t i = 0; i < users.size(); i++) {
                 if(users[i].id == user.id) {
                     users.erase(users.begin()+i);
+                    wt.erase(wt.begin()+i);
                     break;
                 }
             }
@@ -84,30 +86,46 @@ class Pool{
 
         }
 
-        void match() {
-            while(users.size() > 1) {
-                sort(users.begin(), users.end(), [&](User& a, User b){
-                        return a.score < b.score;
-                        });
-                bool flag = true;
-                for (uint32_t i = 1; i < users.size(); i++) {
-                    auto a = users[i-1], b = users[i];
-                    if (b.score - a.score <= 50)
-                    {
-                        users.erase(users.begin()+i-1, users.begin()+i + 1);
-                        save_result(a.id, b.id);
-                        break;
-                    }
-                }
 
-                if(flag) break;
+        bool check_match(uint32_t i, uint32_t j)
+        {
+            auto a = users[i], b = users[j];
+            int dt = abs(a.score - b.score);
+            int a_max_dif = wt[i] * 50;
+            int b_max_dif = wt[j] * 50;
+            return dt<= a_max_dif && b_max_dif;
 
 
-            }
         }
 
+
+        void match() {
+            for (uint32_t i = 0; i < wt.size();i++) wt[i]++;   // 每次匹配时间加1s
+
+            while(users.size() > 1) {
+                bool flag = true;
+                for (uint32_t i = 0; i < users.size(); i++) {
+                    for (uint32_t j = i+1; j < users.size(); j++) {
+                        if(check_match(i, j)){
+                            auto a = users[i], b = users[j];
+                            users.erase(users.begin()+j);
+                            users.erase(users.begin()+i);
+                            wt.erase(wt.begin()+j);
+                            wt.erase(wt.begin()+i);
+                            save_result(a.id, b.id);
+                            flag = false;
+                            break;
+                        }
+
+                    }
+                if(!flag) break;    // 匹配过了外层循环直接break
+            }
+            if (flag) break;     // 找了一轮，没有可用于匹配的，break；
+        }
+    }
     private:
         vector<User> users;
+        vector<int> wt;  // 记录每个用户等待的时间，时间越久匹配范围越大
 
 }pool;
 
@@ -194,9 +212,6 @@ void consume_task() {
             lck.unlock();
             pool.match();
             sleep(1);   // 每一秒匹配一次
-
-
-
         }
         else {
             auto task = message_queue.q.front();
@@ -206,7 +221,7 @@ void consume_task() {
             if (task.type == "add") pool.add(task.user);
             else if(task.type == "remove") pool.remove(task.user);
 
-            pool.match();
+            // pool.match();   // 不去掉就是每次来人都会匹配，时间都加一，不太好
         }
     }
 
